@@ -35,6 +35,14 @@ def create_app():
     def history(): return {"runs":store.history()}
     @application.get("/api/runs/<run_id>")
     def run_detail(run_id): return store.get(run_id)
+    @application.get("/api/runs/<run_id>/ruling")
+    def run_ruling(run_id):
+        run=store.get(run_id)
+        ruling=run.get("ruling") or store.ruling_for(run_id)
+        if not ruling: raise DomainError("NO_RULING","该批次不是续跑批次",404)
+        return {**ruling,"runs":store.runs_for_checkpoint(ruling["checkpoint_key"])}
+    @application.get("/api/rulings")
+    def ruling_history(): return {"rulings":store.rulings()}
     @application.post("/api/runs/<run_id>/review")
     def review(run_id):
         p=request.get_json(silent=True) or {}

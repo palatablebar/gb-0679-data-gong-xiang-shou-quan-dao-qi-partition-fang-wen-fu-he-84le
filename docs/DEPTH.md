@@ -29,10 +29,17 @@
 | TRAP-07 | 上游结果空值 | 误报拒绝 | 隔离缺失 | `app/values.py` | `tests/test_m3.py::test_real_missing_decision_not_zero` |
 | TRAP-19 | 允许与拒绝重叠 | 后写覆盖 | 拒绝优先且排序证据 | `app/modules/m4_conflicts/rules.py` | `tests/test_m4.py::test_deny_priority_counterexample` |
 | TRAP-23 | 授权到期点 | 多放行一次 | 半开生效窗 | `app/modules/m3_grants/rules.py` | `tests/test_m3.py::test_expiry_endpoint_excluded` |
+| TRAP-27 | 续跑沿用原授权 | 到期后仍放行 | 按 `resumed_at` 重取授权 | `app/rulings.py`、`app/modules/m3_grants/rules.py` | `tests/test_resume_ruling.py::test_ruling_picks_resume_time_not_original_grant` |
+| TRAP-28 | 同一断点重试 | 重复生成裁定 | 裁定按断点唯一，重试沿用首次 `resumed_at` | `app/rulings.py`、`app/store.py` | `tests/test_resume_ruling.py::test_retry_cannot_change_resume_moment` |
+| TRAP-29 | 断点依据不全 | 仍导出证据 | 记 `issues` 并阻断封存，保留旧版与证据 | `app/rulings.py`、`app/archive.py`、`app/modules/m7_seals/rules.py` | `tests/test_resume_ruling.py::test_incomplete_checkpoint_archive_blocked` |
 
 ## 对账规则
 
 输入原始逻辑行=最终采纳来源行+隔离来源行+重复行+空白行+分段表头。派生记录用_sources保存完整来源，因此分组不丢行。业务预期合计与上游申报合计之差等于逐行差异之和。结果按输入摘要、规则版本及参数产生唯一批次，事务写入；同源重跑只复用已有批次。
+
+## 续跑到期裁定
+
+复核页对每个续跑批次展示唯一到期裁定（`app/rulings.py`）：授权基准取 `resumed_at`，原授权到期即失效；分区以断点声明的 `partitions` 为界；证据导出与 M7 封存服从 `sealable`。裁定按 `(job_id, checkpoint_id, checkpoint_digest)` 唯一写入 `rulings` 表，同一断点重试不新增裁定、不改变 `resumed_at`；中断的续跑不改写旧批次版本与已存证据。断点依据不全（缺字段、时间序错、分区越界、证据不一致）时返回 409，不得封存。接口：`GET /api/rulings`、`GET /api/runs/<id>/ruling`。
 
 ## 已知不覆盖
 

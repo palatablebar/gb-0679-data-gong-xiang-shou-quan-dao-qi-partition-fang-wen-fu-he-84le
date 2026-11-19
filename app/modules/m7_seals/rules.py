@@ -9,4 +9,15 @@ def evaluate(rows,context):
     ids=[str(r.get("event_id",r.get("_line",""))) for r in rows]
     if len(ids)!=len(set(ids)): raise DomainError("ARCHIVE_DUPLICATE","归档业务键重复")
     encoded=json.dumps(rows,ensure_ascii=False,sort_keys=True,default=str).encode()
-    return {"rows":rows,"quarantine":[],"metrics":{"records":len(rows),"source_lines":len(set(x for row in rows for x in sources(row))),"sha256":hashlib.sha256(encoded).hexdigest(),"ready":True,"differences":sum(r.get("status")=="差异" for r in rows)}}
+    metrics={"records":len(rows),"source_lines":len(set(x for row in rows for x in sources(row))),"sha256":hashlib.sha256(encoded).hexdigest(),"ready":True,"differences":sum(r.get("status")=="差异" for r in rows)}
+    resume=context.get("resume")
+    if resume:
+        # 续跑批次沿用唯一到期裁定：断点依据不全时不得封存。
+        metrics["resume_ruling"]=resume.get("ruling_id")
+        metrics["basis_complete"]=bool(resume.get("basis_complete")) and not resume.get("conflict")
+        metrics["resume_partitions"]=resume.get("partitions")
+        metrics["uncovered_partitions"]=resume.get("uncovered_partitions",[])
+        if not metrics["basis_complete"]:
+            metrics["ready"]=False
+            metrics["blocked_reason"]="INCOMPLETE_CHECKPOINT" if not resume.get("conflict") else "CHECKPOINT_EVIDENCE_MISMATCH"
+    return {"rows":rows,"quarantine":[],"metrics":metrics}
